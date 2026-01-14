@@ -1,0 +1,33 @@
+# Google Apps Script
+.clasp.json
+.claspignore
+
+# Node modules (if using clasp or other tools)
+node_modules/
+package-lock.json
+
+# Environment variables and secrets
+.env
+.env.local
+*.key
+*.pem
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files with sensitive data
+*-test.js
+*-local.js
+
+# Backup files
+*.backup
+*.bak
