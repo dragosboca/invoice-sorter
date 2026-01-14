@@ -1,0 +1,14 @@
+{
+  "name": "invoice-sorter-gas",
+  "version": "1.0.0",
+  "description": "Google Apps Script for sorting invoices",
+  "scripts": {
+    "login": "clasp login",
+    "create": "clasp create --title 'Invoice Sorter' --type standalone --rootDir ./",
+    "deploy": "clasp push"
+  },
+  "dependencies": {
+    "@google/clasp": "^2.4.2",
+    "rubico": "^2.6.0"
+  }
+}
