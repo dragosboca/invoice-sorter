@@ -217,10 +217,27 @@ marker string inside each fake PDF, so tests state what the model "sees".
 **What this does and doesn't prove.** It covers logic, control flow and the
 regressions worth guarding — cross-month matching, dedup, note preservation,
 idempotency. It does **not** prove the real Google APIs behave the way the fakes
-do, nor that Gemini extracts real-world PDFs correctly. Test on a copy of one
-month's folder before pointing it at your archive.
+do, nor that Gemini extracts real-world PDFs correctly.
 
 `npm run deploy` runs the suite first via `predeploy`.
+
+### Checking extraction on real PDFs
+
+The suite fakes Gemini, so it says nothing about whether the model reads *your*
+documents correctly. To check that without deploying or touching Drive:
+
+```bash
+GEMINI_API_KEY=<key> npm run try-extract -- invoice.pdf statement.pdf
+```
+
+It drives `Code.js` itself, so the request is identical to what Apps Script
+sends — same prompt, same model, same generation config, same parser. It prints
+what the model extracted and flags anything that would cause trouble later: an
+unusable date, a missing total, or statement entries with no debit/credit
+direction. One Gemini call per file. The key is read from the environment and
+never written anywhere.
+
+Use it whenever a document lands in `_Unsorted` and you want to know why.
 
 ## Notes and limits
 

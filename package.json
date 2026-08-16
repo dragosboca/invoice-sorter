@@ -4,6 +4,7 @@
   "description": "Google Apps Script for sorting invoices",
   "scripts": {
     "test": "node test/run.js",
+    "try-extract": "node tools/try-extract.js",
     "login": "clasp login",
     "link": "node tools/link-project.js",
     "create": "clasp create --title 'Invoice Sorter' --type standalone --rootDir ./",

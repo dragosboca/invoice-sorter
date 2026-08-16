@@ -72,6 +72,7 @@ const EXPORTS = `;module.exports={
   getRootFolder,getLedgerSpreadsheet,readDataRecords,appendDataRecords,getKnownHashes,
   matchEntriesToInvoices,buildLedgerRows,writeMonthViews,readExistingNotes,
   parseGeminiJson,getPdfPageCount,isPdfFile,isPdfAttachment,monthOf,stripMonthPrefix,listAvailableModels,
+  analyzeDocument,callGeminiWithPdf,invoiceId,
   toCsvCell,toNumber,entryKey,dateOf,getConfig,
   DATA_HEADER,VIEW_HEADER};`;
 
@@ -80,6 +81,10 @@ const EXPORTS = `;module.exports={
  *
  * @param {object} opts.gmailThreads Threads the fake GmailApp should return.
  * @param {function} opts.onHit      Optional coverage callback, per function call.
+ * @param {object}   opts.urlFetch   Replaces the Gemini stub. Supply a real
+ *                                   implementation to talk to the live API,
+ *                                   so the request is byte-identical to what
+ *                                   Apps Script would send.
  */
 function load(opts) {
   opts = opts || {};
@@ -116,7 +121,7 @@ function load(opts) {
     source + EXPORTS)(
     opts.onHit || (() => {}), module_, opts.verbose ? console : quiet,
     PropertiesService, fakes.Utilities, fakes.DriveApp, GmailApp,
-    fakes.SpreadsheetApp, {}, makeGeminiStub(state));
+    fakes.SpreadsheetApp, {}, opts.urlFetch || makeGeminiStub(state));
 
   return { api: module_.exports, state, fakes };
 }
