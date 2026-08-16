@@ -22,6 +22,18 @@ const CODE_PATH = path.join(__dirname, '..', 'Code.js');
 function makeGeminiStub(state) {
   return {
     fetch(url, options) {
+      // The models-list endpoint is a bare GET, not a generateContent call.
+      if (/\/models\?/.test(url)) {
+        state.modelListCalls++;
+        return {
+          getContentText: () => JSON.stringify({
+            models: (state.models || ['gemini-pro-latest', 'gemini-flash-latest'])
+              .map(name => ({ name: 'models/' + name, supportedGenerationMethods: ['generateContent'] }))
+              .concat([{ name: 'models/embedding-001', supportedGenerationMethods: ['embedContent'] }])
+          })
+        };
+      }
+
       state.geminiCalls++;
 
       const payload = JSON.parse(options.payload);
@@ -59,7 +71,7 @@ const EXPORTS = `;module.exports={
   processInvoices,fetchToStaging,triageStaging,rebuildLedger,indexExistingFiles,
   getRootFolder,getLedgerSpreadsheet,readDataRecords,appendDataRecords,getKnownHashes,
   matchEntriesToInvoices,buildLedgerRows,writeMonthViews,readExistingNotes,
-  parseGeminiJson,getPdfPageCount,isPdfFile,isPdfAttachment,monthOf,stripMonthPrefix,
+  parseGeminiJson,getPdfPageCount,isPdfFile,isPdfAttachment,monthOf,stripMonthPrefix,listAvailableModels,
   toCsvCell,toNumber,entryKey,dateOf,getConfig,
   DATA_HEADER,VIEW_HEADER};`;
 
@@ -73,7 +85,7 @@ function load(opts) {
   opts = opts || {};
   fakes.reset();
 
-  const state = { geminiCalls: 0, labelled: [] };
+  const state = { geminiCalls: 0, modelListCalls: 0, labelled: [], models: opts.models };
 
   const GmailApp = {
     search: () => opts.gmailThreads || [],

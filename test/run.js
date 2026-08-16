@@ -298,6 +298,25 @@ section('Full pipeline');
 }
 
 // ------------------------------------------------------------------ helpers --
+section('Model discovery');
+{
+  const ctx = load({ onHit: hit, models: ['gemini-pro-latest', 'gemini-flash-latest'] });
+  const models = ctx.api.listAvailableModels();
+
+  check('lists models that support generateContent', models.length === 2, models.join(', '));
+  check('filters out models that cannot generate',
+    !models.includes('embedding-001'), models.join(', '));
+  check('strips the "models/" prefix', models.every(m => !m.startsWith('models/')));
+  check('the shipped default is among them',
+    models.includes(ctx.api.getConfig('GEMINI_MODEL')),
+    'default is ' + ctx.api.getConfig('GEMINI_MODEL'));
+
+  // The warning path: a key that does not serve the configured model at all.
+  const missing = load({ onHit: hit, models: ['some-other-model'] });
+  check('returns the list even when the configured model is absent',
+    missing.api.listAvailableModels().length === 1);
+}
+
 section('Helpers');
 {
   const { api } = load({ onHit: hit });

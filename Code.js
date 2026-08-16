@@ -32,7 +32,10 @@ const DEFAULTS = {
   UNSORTED_FOLDER_NAME: '_Unsorted',
   LEDGER_NAME: 'Reconciliation Ledger',
   PROCESSED_LABEL: 'Processed-Invoice',
-  GEMINI_MODEL: 'gemini-3-pro-preview',
+  // A '-latest' alias rather than a dated preview id: preview ids get retired,
+  // and a retired id fails every call. Run listAvailableModels() to see what
+  // your own API key actually serves.
+  GEMINI_MODEL: 'gemini-pro-latest',
   // A sanity cap only. Statements run long, and a document's type is unknown
   // until it has been classified, so this must not be tight enough to reject
   // a statement before it is even looked at.
@@ -959,6 +962,49 @@ function getFileHash(fileOrBlob) {
   if (fileId) HASH_CACHE[fileId] = hash;
 
   return hash;
+}
+
+/**
+ * Lists the models your API key can actually call.
+ *
+ * Model ids change and preview ids get retired, at which point every extraction
+ * fails with a NotFound that looks nothing like a model problem. Run this to
+ * see the real list, then set GEMINI_MODEL in Script Properties if the default
+ * is not among them.
+ */
+function listAvailableModels() {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${getGeminiApiKey()}`;
+
+  try {
+    const response = UrlFetchApp.fetch(url);
+    const data = JSON.parse(response.getContentText());
+
+    if (data.error) {
+      console.error(`Gemini API error: ${data.error.message}`);
+      return [];
+    }
+
+    // Only models that can answer generateContent are usable here.
+    const usable = (data.models || [])
+      .filter(model => (model.supportedGenerationMethods || []).indexOf('generateContent') !== -1)
+      .map(model => String(model.name).replace(/^models\//, ''));
+
+    const configured = getConfig('GEMINI_MODEL');
+    console.log(`${usable.length} model(s) support generateContent:`);
+    usable.forEach(name => {
+      console.log(`  ${name}${name === configured ? '   <-- currently configured' : ''}`);
+    });
+
+    if (usable.indexOf(configured) === -1) {
+      console.warn(`\nConfigured model "${configured}" is NOT in the list above. ` +
+        `Every extraction will fail. Set GEMINI_MODEL in Script Properties to one of them.`);
+    }
+
+    return usable;
+  } catch (e) {
+    console.error(`Could not list models: ${e.toString()}`);
+    return [];
+  }
 }
 
 /**

@@ -170,7 +170,7 @@ All optional, all via Script Properties.
 | `UNSORTED_FOLDER_NAME` | Failed triage | `_Unsorted` |
 | `LEDGER_NAME` | Ledger spreadsheet name | `Reconciliation Ledger` |
 | `PROCESSED_LABEL` | Gmail label for processed threads (`null` disables) | `Processed-Invoice` |
-| `GEMINI_MODEL` | Gemini model | `gemini-3-pro-preview` |
+| `GEMINI_MODEL` | Gemini model | `gemini-pro-latest` |
 | `MAX_PDF_PAGES` | Sanity cap; larger PDFs go to `_Unsorted` | `50` |
 | `MATCH_DATE_WINDOW_DAYS` | Max days between invoice date and charge | `14` |
 | `MATCH_AMOUNT_TOLERANCE` | Max amount difference for a match | `0.01` |
@@ -194,6 +194,7 @@ is useful for debugging and for large backfills:
 | `triageStaging()` | Classify, file by date, record in the ledger |
 | `rebuildLedger()` | Re-match everything, rewrite month tabs and CSVs |
 | `indexExistingFiles()` | One-time migration: register a pre-existing archive. No API calls |
+| `listAvailableModels()` | List the models your API key can actually call |
 | `testGmailSearch()` | Show what the query matches, no changes |
 
 `rebuildLedger()` makes **no API calls** — it works from stored records, so
@@ -243,6 +244,7 @@ month's folder before pointing it at your archive.
 | Symptom | Cause |
 |---------|-------|
 | "Gemini API key not configured" | Add `GEMINI_API_KEY` to Script Properties |
+| Every document fails extraction | The model ID may not exist for your key. Run `listAvailableModels()` and set `GEMINI_MODEL` to one it lists |
 | Files pile up in `_Staging` | Triage is erroring — check the log; transient errors leave files in place deliberately |
 | Real invoices land in `_Unsorted` | Model misclassified, or the PDF exceeds `MAX_PDF_PAGES`. Move them back to `_Staging` to retry |
 | Everything shows `MISSING INVOICE` | The statement was filed but its invoices weren't — check `_Unsorted` |
