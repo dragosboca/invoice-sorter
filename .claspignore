@@ -1,0 +1,7 @@
+# Allowlist: clasp pushes only what is un-ignored below.
+# Without this, `clasp push --rootDir ./` would upload test/*.js into Apps
+# Script, where require() does not exist.
+**/**
+
+!appsscript.json
+!Code.js

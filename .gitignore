@@ -1,6 +1,19 @@
 # Google Apps Script
+# .clasp.json holds YOUR scriptId, which identifies your private project.
+# Generate it with `npm run link -- <scriptId>`; never commit it.
 .clasp.json
-.claspignore
+
+# clasp OAuth client secrets, if you ever enable `clasp run`.
+creds.json
+.clasprc.json
+
+# Local backups of a deployed script. These are your own production code and
+# have no business in a public repo.
+*.snapshot.js
+Code.live-snapshot.js
+
+# .claspignore is intentionally NOT ignored: it is the allowlist controlling
+# what gets deployed, so it must be version-controlled.
 
 # Node modules (if using clasp or other tools)
 node_modules/

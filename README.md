@@ -1,173 +1,250 @@
-# Automated Invoice Sorter (Google Apps Script)
+# Automated Invoice Sorter & Statement Reconciler (Google Apps Script)
 
-This project contains a Google Apps Script to automate the organization of invoice PDFs from Gmail into Google Drive folders structured by Year/Month.
+A Google Apps Script that files invoice PDFs and bank statements from Gmail into
+Google Drive by Year/Month, then keeps a running ledger telling you **which
+statement charges have no matching invoice**.
 
-## Features
+## How it works
 
-- **Gmail Search:** Finds emails with attachments (excluding emails from yourself).
-- **Direct PDF Processing:** Sends PDFs directly to Gemini API (no OCR needed).
-- **LLM-Based Invoice Detection:** Uses Google Gemini to intelligently determine if a document is an invoice.
-- **Smart Date Detection:** Uses Google Gemini to accurately extract the invoice date.
-- **Auto-Organization:** Saves invoice files to Google Drive in `Invoices/YYYY/MM/` folders.
-- **Processed Labeling:** Adds a label to processed emails to avoid duplicates.
-- **Duplicate Detection:** Prevents reprocessing by checking file hashes and names.
-- **Handles Multiple Content Types:** Processes PDFs even when mislabeled as `application/octet-stream`.
+```
+Gmail ──▶ _Staging ──▶ YYYY/MM/ ──▶ Reconciliation Ledger
+         (fetch)      (triage)      (rebuild)
+```
 
-## Setup Instructions
+Every PDF — invoice or account statement, emailed by your bank or dropped into
+the staging folder by hand — goes through one queue, gets classified by Gemini
+**exactly once**, and is filed by date.
+
+- **Invoices** file under their invoice date.
+- **Statements** file under the period they *cover*, not the date they arrived —
+  so a July statement emailed on August 1st sits with the July invoices it
+  reconciles.
+- **Anything else** moves to `_Unsorted/`, so staging stays a true queue (empty
+  means done) and a rejected file is never sent to Gemini twice.
+
+The ledger is a Google Sheet holding every statement entry and every invoice
+ever seen. Matching runs across the **whole ledger**, not per folder — so an
+invoice dated July 28th charged on the August statement still matches. Month
+boundaries are a presentation detail, not a correctness problem.
+
+### Folder layout
+
+```
+Invoices/
+├── _Staging/                     drop PDFs here (or let Gmail fill it)
+├── _Unsorted/                    failed triage, for review
+├── Reconciliation Ledger         Google Sheet — the source of truth
+└── 2026/
+    └── 07/
+        ├── [2026-07] acme-invoice.pdf
+        ├── [2026-07] bank-statement.pdf
+        └── reconciliation-2026-07.csv    derived snapshot
+```
+
+### The ledger
+
+One tab per month, each row one of four states:
+
+| Status | Meaning |
+|--------|---------|
+| `MISSING INVOICE` | **A charge with no invoice — what you're looking for.** |
+| `NEEDS REVIEW` | Entry the model couldn't clearly mark debit or credit. Not matched, never silently dropped. |
+| `NO STATEMENT ENTRY` | Invoice not yet charged, or its statement hasn't arrived. |
+| `MATCHED` | Reconciled. |
+
+Rows are sorted with problems first. A **Notes** column is preserved across
+rebuilds (keyed by row), so anything you type by hand survives.
+
+The `_Data` tab holds the raw extraction records. It is also the deduplication
+index — one sheet read instead of walking every folder in Drive — so re-running
+never re-bills you for a document already processed.
+
+## Setup
 
 ### Option A: Deploy with Clasp (Recommended)
 
-If you want to deploy directly from your local machine using the command line:
+```bash
+npm install
+npm run login                  # browser consent
+```
 
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+Then point the repo at an Apps Script project — **either** create a new one:
 
-2. **Login to Google:**
-   ```bash
-   npm run login
-   ```
-   This will open a browser window to authenticate with your Google account.
+```bash
+npm run create
+```
 
-3. **Create a new Apps Script project:**
-   ```bash
-   npm run create
-   ```
-   This creates a new standalone Apps Script project in your Google account.
+**or** link an existing one, using its Script ID from the editor URL
+(`script.google.com/home/projects/<SCRIPT_ID>/edit`, or Project Settings →
+Script ID):
 
-4. **Deploy the code:**
-   ```bash
-   npm run deploy
-   ```
-   Or simply run the deploy script:
-   ```bash
-   ./deploy.sh
-   ```
+```bash
+npm run link -- <SCRIPT_ID>
+# or: SCRIPT_ID=<SCRIPT_ID> npm run link
+```
 
-5. **Continue with configuration** - Skip to step 3 below to configure the API key and settings.
+Then deploy:
 
-### Option B: Manual Setup via Web Interface
+```bash
+npm run deploy                 # runs the test suite first
+```
 
-### 1. Create a New Script
-1. Go to [script.google.com](https://script.google.com/).
-2. Click **New Project**.
-3. Rename the project to "Invoice Sorter" (or similar).
+`npm run link` writes `.clasp.json`, which holds **your** Script ID and is
+gitignored — nothing machine-specific is ever committed. See
+`.clasp.json.example` for the shape. A `.claspignore` allowlist means only
+`Code.js` and `appsscript.json` are ever uploaded; tests and local tooling stay
+on your machine.
 
-### 2. Copy Code
-1. Copy the contents of `Code.js` from this repository.
-2. Paste it into the `Code.gs` file in the Apps Script editor (replace existing content).
+To inspect what is currently live before overwriting it:
 
-### 3. Get Google Gemini API Key
-The script uses Google's Gemini API for intelligent invoice detection and date extraction.
-1. Go to [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
-2. Sign in with your Google account.
-3. Click **Create API Key**.
-4. Copy the API key.
+```bash
+npm run pull                   # WARNING: overwrites local Code.js
+```
 
-### 4. Configure Script Properties
-The script uses Script Properties to store sensitive configuration securely (not in the code).
+Prefer pulling into a scratch directory if you have uncommitted work.
 
-**Required property:**
+### Option B: Manual Setup
 
-1. In the Apps Script editor, click the **Project Settings** (gear icon) in the left sidebar.
-2. Scroll down to the **Script Properties** section.
-3. Click **Add script property** and add:
+1. Go to [script.google.com](https://script.google.com/) → **New Project**.
+2. Copy `Code.js` into `Code.gs`, replacing the existing content.
 
-| Property Name | Value | Example |
-|---------------|-------|---------|
-| `GEMINI_API_KEY` | Your Gemini API key from step 3 | `AIzaSyD...` |
+### Gemini API key (required)
 
-4. Click **Save script properties**.
+1. Get a key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
+2. In the Apps Script editor: **Project Settings** (gear) → **Script Properties**
+   → **Add script property**.
+3. Name `GEMINI_API_KEY`, value your key. Save.
 
-**Optional:** To customize the Gmail search query, add:
+### Gmail query
 
-| Property Name | Value | Default |
-|---------------|-------|---------|
-| `GMAIL_SEARCH_QUERY` | Gmail search query to find invoices | `from:-me has:attachment newer_than:35d` |
+Have your bank email you the account statement, and make sure the query matches
+both it and your invoices.
 
-**Example Gmail search queries:**
-- **Basic:** `from:-me has:attachment newer_than:35d`
-  - Finds emails not from you, with attachments, from the last 35 days
-- **Specific recipients:** `from:-me (to:invoices@example.com OR to:billing@example.com) has:attachment`
-  - Only emails sent to specific addresses
-- **Exclude file types:** `from:-me has:attachment -filename:.ics newer_than:35d`
-  - Excludes calendar invites (.ics files)
-- **Specific sender domain:** `from:@example.com has:attachment filename:pdf`
-  - Only from specific domain with PDF attachments
+| Property | Default |
+|----------|---------|
+| `GMAIL_SEARCH_QUERY` | `from:-me has:attachment newer_than:35d` |
 
-💡 **Tip:** Test your query in Gmail's search bar first to see which emails it matches!
+Examples:
+- `from:-me has:attachment newer_than:35d` — not from you, with attachments, last 35 days
+- `from:-me (to:invoices@example.com OR from:@mybank.com) has:attachment`
+- `from:-me has:attachment -filename:.ics newer_than:35d` — excludes calendar invites
 
-### 5. Additional Configuration (Optional)
-All configuration can be customized via Script Properties without editing the code. Add any of these properties to override defaults:
+💡 Test the query in Gmail's search bar first, or run `testGmailSearch()`.
 
-| Property Name | Description | Default Value |
-|---------------|-------------|---------------|
-| `ROOT_FOLDER_NAME` | Google Drive folder name | `Invoices` |
-| `PROCESSED_LABEL` | Gmail label for processed emails (set to `null` to disable) | `Processed-Invoice` |
-| `GEMINI_MODEL` | Gemini model to use | `gemini-3-pro-preview` |
-| `MAX_PDF_PAGES` | Maximum pages to process (skip larger documents) | `10` |
-| `TEMPERATURE` | LLM temperature for deterministic responses | `0.1` |
-| `MAX_OUTPUT_TOKENS` | Maximum tokens in API response | `2048` |
-| `MAX_RETRIES` | Number of retries for rate limits | `5` |
-| `INITIAL_DELAY_MS` | Initial retry delay in milliseconds | `1000` |
-| `MAX_DELAY_MS` | Maximum retry delay in milliseconds | `30000` |
+### Migrating an existing archive (do this first)
 
-**Example:** To change the folder name to "Bills", add a Script Property:
-- Name: `ROOT_FOLDER_NAME`
-- Value: `Bills`
+**If you already have invoices filed under `Invoices/YYYY/MM/` from a previous
+version, run `indexExistingFiles()` once before anything else.**
 
-### 6. Test Run
-1. **Optional:** First test your Gmail search query by running `testGmailSearch()` to see which emails match.
-2. Select the `processInvoices` function from the toolbar dropdown.
-3. Click **Run**.
-4. You will be asked to authorize permissions (Gmail, Drive, etc.).
-5. Check the "Execution Log" to see the progress.
+The ledger doubles as the deduplication index. Starting empty, it would treat
+every recent Gmail attachment as new and file a *second copy* of documents you
+already have. `indexExistingFiles()` walks the existing `YYYY/MM` folders and
+records each file's content hash, which is enough to make them recognisable.
 
-### 7. Set Up Automation (Trigger)
-1. Click on **Triggers** (clock icon) in the left sidebar.
-2. Click **Add Trigger**.
-3. **Choose which function to run:** `processInvoices`.
-4. **Select event source:** `Time-driven`.
-5. **Select type of time based trigger:** `Month timer`.
-6. **Select day of month:** `1st`.
-7. **Select time of day:** (Choose a time, e.g., `Midnight to 1am`).
-8. Click **Save**.
+It makes no Gemini calls, is safe to re-run, and moves nothing. Indexed files
+are recorded as already-seen but are *not* reconciled — their contents were
+never extracted. To reconcile them too, move them back into `_Staging/`.
 
-Now the script will run automatically on the 1st of every month!
+Starting fresh with an empty `Invoices/` folder? Skip this.
 
-## How It Works
+### First run
 
-1. **Search Gmail** for emails matching the configured query.
-2. **Extract attachments** and check if they are PDFs (by content type or file extension).
-3. **Check page count** - Skip documents with too many pages (likely not invoices).
-4. **Quick duplicate check** - Skip if the file already exists in the Drive structure.
-5. **Invoice detection** - Use Gemini AI to verify it's actually an invoice.
-6. **Date extraction** - Use Gemini AI to extract the invoice date.
-7. **Save to Drive** - Create `Invoices/YYYY/MM/` folders and save with date prefix.
-8. **Label email** - Add a "Processed-Invoice" label to the Gmail thread.
+1. Select `processInvoices` in the toolbar dropdown → **Run**.
+2. Authorize when prompted (Gmail, Drive, Sheets).
+3. Watch the execution log, then open the **Reconciliation Ledger** in `Invoices/`.
+
+### Automate it
+
+**Triggers** (clock icon) → **Add Trigger** → function `processInvoices`,
+source `Time-driven`, type `Month timer`, day `1st`. Run it a few days into the
+month so the previous month's statement has arrived.
+
+## Configuration
+
+All optional, all via Script Properties.
+
+| Property | Description | Default |
+|----------|-------------|---------|
+| `ROOT_FOLDER_NAME` | Drive folder for everything | `Invoices` |
+| `STAGING_FOLDER_NAME` | Pre-triage queue | `_Staging` |
+| `UNSORTED_FOLDER_NAME` | Failed triage | `_Unsorted` |
+| `LEDGER_NAME` | Ledger spreadsheet name | `Reconciliation Ledger` |
+| `PROCESSED_LABEL` | Gmail label for processed threads (`null` disables) | `Processed-Invoice` |
+| `GEMINI_MODEL` | Gemini model | `gemini-3-pro-preview` |
+| `MAX_PDF_PAGES` | Sanity cap; larger PDFs go to `_Unsorted` | `50` |
+| `MATCH_DATE_WINDOW_DAYS` | Max days between invoice date and charge | `14` |
+| `MATCH_AMOUNT_TOLERANCE` | Max amount difference for a match | `0.01` |
+| `WRITE_MONTH_CSV` | Write a CSV snapshot per month folder | `true` |
+| `EXTRACTION_MAX_OUTPUT_TOKENS` | Token limit for extraction | `8192` |
+| `TEMPERATURE` | LLM temperature | `0.1` |
+| `MAX_RETRIES` / `INITIAL_DELAY_MS` / `MAX_DELAY_MS` | Rate-limit backoff | `5` / `1000` / `30000` |
+
+`MAX_PDF_PAGES` defaults to 50, not 10: a document's type is unknown until it
+has been classified, so the cap must not reject a long statement before anyone
+looks at it.
+
+## Running the phases separately
+
+`processInvoices` runs all three in order. Each is independently runnable, which
+is useful for debugging and for large backfills:
+
+| Function | Does |
+|----------|------|
+| `fetchToStaging()` | Gmail → `_Staging`, skipping anything already seen |
+| `triageStaging()` | Classify, file by date, record in the ledger |
+| `rebuildLedger()` | Re-match everything, rewrite month tabs and CSVs |
+| `indexExistingFiles()` | One-time migration: register a pre-existing archive. No API calls |
+| `testGmailSearch()` | Show what the query matches, no changes |
+
+`rebuildLedger()` makes **no API calls** — it works from stored records, so
+re-running it after tweaking `MATCH_DATE_WINDOW_DAYS` is free and instant.
+
+## Tests
+
+```bash
+npm test
+```
+
+`Code.js` targets the Apps Script runtime, so it can't be `require`d. The suite
+reads it as text and evaluates it against in-memory fakes for Drive, Gmail,
+Sheets and the Gemini API (`test/fakes.js`), which lets every phase run in plain
+Node with no network and no Google account. Gemini responses are declared by a
+marker string inside each fake PDF, so tests state what the model "sees".
+
+65 checks, 40 of 41 functions executed. Coverage is printed after each run.
+
+**What this does and doesn't prove.** It covers logic, control flow and the
+regressions worth guarding — cross-month matching, dedup, note preservation,
+idempotency. It does **not** prove the real Google APIs behave the way the fakes
+do, nor that Gemini extracts real-world PDFs correctly. Test on a copy of one
+month's folder before pointing it at your archive.
+
+`npm run deploy` runs the suite first via `predeploy`.
+
+## Notes and limits
+
+- **Execution time.** Triage costs one Gemini call per PDF, 5–20s each, against
+  Apps Script's 6-minute cap (30 min on Workspace). Roughly 20–60 documents per
+  run. This is *resumable*: triage moves each file out of staging as it
+  finishes, so if a run times out, just run it again.
+- **Transient failures stay put.** A document that errors during triage is left
+  in staging rather than moved to `_Unsorted`, so an API blip never quietly
+  buries a real invoice.
+- **Matching is conservative.** One invoice matches at most one charge, both
+  amounts must be real numbers, currencies must agree, and dates must fall
+  within the window. An invoice whose total the model failed to read is
+  reported as unmatched rather than guessed at.
+- **Credits are excluded** from matching and only counted.
+- **CSV snapshots are derived.** Don't hand-edit them — they're overwritten on
+  every rebuild. Put annotations in the ledger's Notes column instead.
 
 ## Troubleshooting
 
-### Script says "Gemini API key not found"
-Add the API key to Script Properties as described in step 4.
-
-### PDFs are being skipped
-Check the execution logs. The script shows why each attachment is skipped:
-- "Skipping non-PDF" - File is not a PDF
-- "Skipping: N pages" - Document has too many pages
-- "Not an invoice" - Gemini determined it's not an invoice
-- "No date found" - Gemini couldn't extract an invoice date
-
-### Want to see what emails are being found?
-Run the `testGmailSearch()` function to see all matching emails and their attachments.
-
-## Configuration Options
-
-In the `CONFIG` object:
-- `SEARCH_QUERY` - Gmail search query to find emails
-- `ROOT_FOLDER_NAME` - Name of the root folder in Google Drive
-- `PROCESSED_LABEL` - Gmail label to add to processed threads (set to `null` to disable)
-- `GEMINI.MODEL` - Gemini model to use (e.g., `gemini-3-pro-preview`)
-- `GEMINI.MAX_PDF_PAGES` - Maximum pages to process (default: 2)
-- `GEMINI.MAX_RETRIES` - Number of retries for API rate limits (default: 5)
+| Symptom | Cause |
+|---------|-------|
+| "Gemini API key not configured" | Add `GEMINI_API_KEY` to Script Properties |
+| Files pile up in `_Staging` | Triage is erroring — check the log; transient errors leave files in place deliberately |
+| Real invoices land in `_Unsorted` | Model misclassified, or the PDF exceeds `MAX_PDF_PAGES`. Move them back to `_Staging` to retry |
+| Everything shows `MISSING INVOICE` | The statement was filed but its invoices weren't — check `_Unsorted` |
+| Charges show as `NEEDS REVIEW` | The model didn't mark debit/credit. Fill them in manually or re-run triage on that statement |
+| `Exceeded maximum execution time` | Expected on a backlog. Run again — it resumes |

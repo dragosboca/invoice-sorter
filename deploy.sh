@@ -15,16 +15,19 @@ fi
 
 # 2. Check for Clasp Configuration
 if [ ! -f ".clasp.json" ]; then
-  echo "⚠️  No Google Apps Script project found (.clasp.json is missing)."
-  echo "   You need to authenticate and create a project first."
+  echo "⚠️  No Google Apps Script project linked (.clasp.json is missing)."
+  echo "   It is gitignored on purpose: it holds YOUR script id."
   echo ""
   echo "   STEP A: Login to Google"
   echo "   > npm run login"
   echo ""
-  echo "   STEP B: Create the project"
+  echo "   STEP B: Point this repo at a project — either create a new one:"
   echo "   > npm run create"
   echo ""
-  echo "   Once you have done these two steps manually, run this script again."
+  echo "           ...or link an existing one by its Script ID:"
+  echo "   > npm run link -- <SCRIPT_ID>"
+  echo ""
+  echo "   Once you have done these two steps, run this script again."
   exit 1
 fi
 
