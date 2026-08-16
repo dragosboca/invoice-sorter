@@ -12,7 +12,6 @@
     "pull": "clasp pull"
   },
   "dependencies": {
-    "@google/clasp": "^2.4.2",
-    "rubico": "^2.6.0"
+    "@google/clasp": "^2.4.2"
   }
 }

@@ -37,9 +37,10 @@ package-lock.json
 *.log
 npm-debug.log*
 
-# Test files with sensitive data
-*-test.js
+# Scratch files that may hold real data. Deliberately NOT '*-test.js', which
+# would silently swallow legitimately named tests; the suite lives in test/.
 *-local.js
+*.scratch.js
 
 # Backup files
 *.backup
