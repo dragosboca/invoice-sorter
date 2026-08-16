@@ -97,6 +97,18 @@ section('Matching core');
     [{ fileName: 'notot.pdf', date: '2026-07-10', currency: 'EUR' }]);
   check('invoice with no total cannot match (NaN guard)', r.matched.length === 0 && r.missing.length === 1);
 
+  // Regression: identity was keyed on filename, but two vendors both attaching
+  // 'invoice.pdf' in one month collide on '[YYYY-MM] invoice.pdf', which made
+  // the second permanently unmatchable.
+  r = api.matchEntriesToInvoices(
+    [{ date: '2026-07-05', description: 'A', amount: 10, currency: 'EUR', direction: 'debit', key: 'e1' },
+     { date: '2026-07-06', description: 'B', amount: 20, currency: 'EUR', direction: 'debit', key: 'e2' }],
+    [{ fileName: '[2026-07] invoice.pdf', vendor: 'A', date: '2026-07-05', total: 10, currency: 'EUR', key: 'hashA' },
+     { fileName: '[2026-07] invoice.pdf', vendor: 'B', date: '2026-07-06', total: 20, currency: 'EUR', key: 'hashB' }]);
+  check('same-named invoices from different vendors both match',
+    r.matched.length === 2 && r.missing.length === 0,
+    `matched ${r.matched.length}, missing ${r.missing.length}`);
+
   // Regression: `direction !== 'debit'` silently bucketed unknowns as credits.
   r = api.matchEntriesToInvoices(
     [{ date: '2026-07-10', amount: 5, currency: 'EUR', direction: undefined, key: 'u' }], []);

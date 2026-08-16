@@ -561,7 +561,7 @@ function matchEntriesToInvoices(statementEntries, invoices) {
     let bestDistance = Infinity;
 
     for (const invoice of invoices) {
-      if (usedInvoices.has(invoice.fileName)) continue;
+      if (usedInvoices.has(invoiceId(invoice))) continue;
 
       // Both amounts must be real numbers before comparing: NaN > tolerance is
       // false, so a totalless invoice would otherwise pass this guard and match
@@ -583,16 +583,28 @@ function matchEntriesToInvoices(statementEntries, invoices) {
     }
 
     if (bestInvoice) {
-      usedInvoices.add(bestInvoice.fileName);
+      usedInvoices.add(invoiceId(bestInvoice));
       matched.push({ entry: entry, invoice: bestInvoice });
     } else {
       missing.push(entry);
     }
   }
 
-  const unmatchedInvoices = invoices.filter(invoice => !usedInvoices.has(invoice.fileName));
+  const unmatchedInvoices = invoices.filter(invoice => !usedInvoices.has(invoiceId(invoice)));
 
   return { matched, missing, unmatchedInvoices, ignoredCredits: credits, unclassified };
+}
+
+/**
+ * Identity of an invoice for "already matched" bookkeeping.
+ *
+ * Prefers the content hash: filenames are NOT unique, since two vendors both
+ * attaching `invoice.pdf` in the same month both become `[YYYY-MM] invoice.pdf`.
+ * Keying on the name made the second one permanently unmatchable and reported
+ * its charge as a missing invoice.
+ */
+function invoiceId(invoice) {
+  return invoice.key || invoice.fileName;
 }
 
 /**
