@@ -8,7 +8,7 @@
     "link": "node tools/link-project.js",
     "create": "clasp create --title 'Invoice Sorter' --type standalone --rootDir ./",
     "predeploy": "npm test",
-    "deploy": "clasp push",
+    "deploy": "clasp push -f",
     "pull": "clasp pull"
   },
   "dependencies": {
